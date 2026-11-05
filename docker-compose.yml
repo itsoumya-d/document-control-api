@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: documents
+      POSTGRES_USER: documents
+      POSTGRES_PASSWORD: documents
+    ports: ["5432:5432"]
+    volumes: ["document-db:/var/lib/postgresql/data"]
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://documents:documents@db:5432/documents
+      API_KEY: dev-key
+    ports: ["8000:8000"]
+    depends_on: [db]
+volumes:
+  document-db:
