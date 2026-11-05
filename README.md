@@ -32,6 +32,34 @@ service models those controls explicitly.
 - Search by title or document number
 - Activity trail for create/checkout/checkin/archive
 - Health probe and consistent 401/404/422 responses
+- Structured content components with versioned content, approval status and SHA-256 hashes
+- Component dependency graph with cycle detection
+- Document references pinned to component versions
+- Document approval gate that blocks draft, stale or deprecated components
+- Transitive change-impact analysis and workspace reuse metrics
+- Content Governance Studio at `/studio` using Docuvera's Open Sans/teal/light-gray tokens
+
+## Content governance API
+
+| Method | Route | Purpose |
+|---|---|---|
+| POST | `/workspaces/:id/components` | Create a component and draft v1 |
+| GET | `/workspaces/:id/components` | List components |
+| POST | `/components/:id/versions` | Add a new draft version |
+| POST | `/components/:id/versions/:version/approve` | Approve a version |
+| POST | `/components/:id/deprecate` | Deprecate a component |
+| POST | `/components/:id/dependencies` | Add a dependency (cycle-safe) |
+| POST | `/documents/:id/components` | Pin a component version to a document |
+| POST | `/documents/:id/approve` | Approve a document only when every reference is current and approved |
+| GET | `/documents/:id/approval` | Read approval state |
+| GET | `/components/:id/impact` | Direct/transitive dependents, affected documents and stale references |
+| GET | `/workspaces/:id/reuse` | Component reuse rate and per-component usage |
+
+The approval formula is: a document is approvable only when every referenced
+component version is approved, is the component's current version, and the
+component is not deprecated. Reuse is reported as
+`reused_references / document_references`, where a reference is reused once a
+component is used by more than one document.
 
 ## Run locally
 
@@ -52,6 +80,10 @@ docker compose up --build
 npm test
 npm run build
 ```
+
+36 Vitest tests cover the original document-control lifecycle plus component
+versioning, approvals, dependency cycles, document approval gates, impact
+analysis and reuse metrics.
 
 ## Honest scope
 
