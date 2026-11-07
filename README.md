@@ -85,9 +85,45 @@ npm run build
 versioning, approvals, dependency cycles, document approval gates, impact
 analysis and reuse metrics.
 
+## AI-native diligence (citation-verifiable extraction)
+
+A second domain on top of the same primitives, built for AI-native legal and
+financial services: an agent extracts terms from long documents, and **every
+claim must link back to the exact page it came from** — or it is marked
+`NOT_FOUND` and routed to an expert. It never guesses.
+
+- `POST /diligence/projects` — a diligence project in a workspace
+- `POST /diligence/projects/:id/documents` — ingest a document with page count
+  and full text (SHA-256 hashed)
+- `POST /diligence/projects/:id/claims` — an agent-extracted term, with
+  clause type (termination rights, change of control, …), confidence and model
+- `POST /diligence/claims/:id/citations` — page-anchored evidence; the quote
+  must appear **verbatim** in the cited document or the request is rejected
+- `POST /diligence/claims/:id/mark-not-found` — route unevidenced claims to
+  an expert instead of fabricating an answer
+- `POST /diligence/claims/:id/review` — expert sign-off: `VERIFY` (requires a
+  citation), `REJECT`, or `CORRECT` (records the correction and spawns a new
+  claim linked to the original)
+- `GET /diligence/projects/:id/queue` — the expert queue: `PENDING` and
+  `NOT_FOUND` claims
+- `GET /diligence/projects/:id/summary` — documents and claim counts by status
+- `POST /diligence/evaluate` — the “facts, not vibes” metric: per-clause
+  recall (matched gold / gold), precision and false-positive count against a
+  gold set, pooled across clauses
+
+The never-guess invariant also shows up in the numbers: the eval counts a
+predicted term as correct only when it matches a gold term after
+normalization, so a model that hallucinates terms loses precision and a
+model that misses terms loses recall — exactly the regression signal the CI
+of an AI-native service needs.
+
+51 Vitest tests cover the document-control lifecycle plus all of the
+diligence flows above (valid citations, verbatim-quote enforcement,
+verification gates, corrections, expert queue, evaluation metrics).
+
 ## Honest scope
 
 This is a real, tested document-control service, not a full iManage replacement.
 It does not store binaries, OCR, preview files, integrate with Outlook/Office,
-enforce per-folder ACLs, or implement legal hold. The README does not claim
-production usage.
+enforce per-folder ACLs, or implement legal hold. The diligence layer works
+on supplied text, not live PDF parsing. The README does not claim production usage.

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Database } from "./db.js";
 import { DocumentService, NotFoundError, ValidationError } from "./service.js";
 import { ContentService } from "./content.js";
+import { DiligenceService } from "./diligence.js";
 import { studioPage } from "./studio.js";
 
 const workspaceSchema = z.object({ code: z.string().min(1), name: z.string().min(1), client: z.string().min(1), retention_years: z.number().int().positive().default(7) });
@@ -14,11 +15,18 @@ const versionSchema = z.object({ content: z.string().min(1), actor: z.string().m
 const approveComponentSchema = z.object({ actor: z.string().min(1) });
 const dependencySchema = z.object({ depends_on_id: z.number().int().positive(), actor: z.string().min(1) });
 const referenceSchema = z.object({ component_id: z.number().int().positive(), component_version: z.number().int().positive(), actor: z.string().min(1) });
+const diligenceProjectSchema = z.object({ workspace_id: z.number().int().positive(), name: z.string().min(1), actor: z.string().min(1) });
+const ingestSchema = z.object({ name: z.string().min(1), kind: z.string().min(1), page_count: z.number().int().positive(), content_text: z.string().min(1), actor: z.string().min(1) });
+const claimSchema = z.object({ clause_type: z.string().min(1), term: z.string().min(1), confidence: z.number().min(0).max(1), model: z.string().min(1), actor: z.string().min(1) });
+const citationSchema = z.object({ document_id: z.number().int().positive(), page: z.number().int().positive(), quote: z.string().min(1), char_start: z.number().int().min(0), char_end: z.number().int().min(0) });
+const reviewSchema = z.object({ reviewer: z.string().min(1), decision: z.string().min(1), correction: z.string().optional() });
+const evaluateSchema = z.object({ gold: z.array(z.object({ clause_type: z.string(), term: z.string() })), predicted: z.array(z.object({ clause_type: z.string(), term: z.string() })) });
 
 export function buildApp(db: Database, apiKey: string): FastifyInstance {
   const app = Fastify({ logger: false });
   const service = new DocumentService(db);
   const content = new ContentService(db);
+  const diligence = new DiligenceService(db);
 
   app.addHook("preHandler", async (request, reply) => {
     if (request.url === "/health" || request.url === "/studio") return;
@@ -159,6 +167,51 @@ export function buildApp(db: Database, apiKey: string): FastifyInstance {
       const workspaceId = z.coerce.number().int().positive().parse((request.params as { id: string }).id);
       return await content.reuse(workspaceId);
     } catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/projects", async (request, reply) => {
+    try { const body = diligenceProjectSchema.parse(request.body); return reply.code(201).send(await diligence.createProject(body.workspace_id, body.name, body.actor)); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/projects/:id/documents", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); const body = ingestSchema.parse(request.body); return reply.code(201).send(await diligence.ingestDocument(id, body.name, body.kind, body.page_count, body.content_text, body.actor)); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/projects/:id/claims", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); const body = claimSchema.parse(request.body); return reply.code(201).send(await diligence.createClaim(id, body.clause_type, body.term, body.confidence, body.model, body.actor)); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/claims/:id/citations", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); const body = citationSchema.parse(request.body); return reply.code(201).send(await diligence.addCitation(id, body.document_id, body.page, body.quote, body.char_start, body.char_end)); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/claims/:id/mark-not-found", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); const body = z.object({ actor: z.string().min(1) }).parse(request.body); return await diligence.markNotFound(id, body.actor); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/claims/:id/review", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); const body = reviewSchema.parse(request.body); return await diligence.review(id, body.reviewer, body.decision, body.correction); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.get("/diligence/projects/:id/queue", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); return await diligence.expertQueue(id); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.get("/diligence/projects/:id/summary", async (request, reply) => {
+    try { const id = z.coerce.number().int().positive().parse((request.params as { id: string }).id); return await diligence.summary(id); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/diligence/evaluate", async (request, reply) => {
+    try { const body = evaluateSchema.parse(request.body); return diligence.evaluate(body.gold, body.predicted); }
+    catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
   });
 
   return app;

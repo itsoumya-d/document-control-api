@@ -94,3 +94,68 @@ CREATE TABLE IF NOT EXISTS component_activities (
   detail TEXT NOT NULL DEFAULT '',
   at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- AI-native diligence: citation-verifiable extraction with a never-guess invariant.
+CREATE TABLE IF NOT EXISTS diligence_projects (
+  id SERIAL PRIMARY KEY,
+  workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ingested_documents (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES diligence_projects(id),
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'pdf',
+  page_count INTEGER NOT NULL CHECK (page_count > 0),
+  content_text TEXT NOT NULL,
+  content_sha256 TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PARSED',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS extraction_claims (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES diligence_projects(id),
+  clause_type TEXT NOT NULL,
+  term TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0 CHECK (confidence BETWEEN 0 AND 1),
+  model TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  route_expert BOOLEAN NOT NULL DEFAULT false,
+  supersedes_id INTEGER REFERENCES extraction_claims(id),
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS claim_citations (
+  id SERIAL PRIMARY KEY,
+  claim_id INTEGER NOT NULL REFERENCES extraction_claims(id),
+  ingested_document_id INTEGER NOT NULL REFERENCES ingested_documents(id),
+  page INTEGER NOT NULL CHECK (page > 0),
+  quote TEXT NOT NULL,
+  char_start INTEGER NOT NULL CHECK (char_start >= 0),
+  char_end INTEGER NOT NULL CHECK (char_end >= char_start),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS review_decisions (
+  id SERIAL PRIMARY KEY,
+  claim_id INTEGER NOT NULL REFERENCES extraction_claims(id),
+  reviewer TEXT NOT NULL,
+  decision TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS correction_log (
+  id SERIAL PRIMARY KEY,
+  claim_id INTEGER NOT NULL REFERENCES extraction_claims(id),
+  reviewer TEXT NOT NULL,
+  original_term TEXT NOT NULL,
+  corrected_term TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
