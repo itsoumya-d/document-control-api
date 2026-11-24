@@ -121,6 +121,18 @@ of an AI-native service needs.
 diligence flows above (valid citations, verbatim-quote enforcement,
 verification gates, corrections, expert queue, evaluation metrics).
 
+## Records Compliance & Statutory Retention Schedule Classifier
+
+Automated document classification and retention schedule enforcement according to regulatory General Disposal Authority (GDA) rules:
+
+- Sensitivity classification: `UNCLASSIFIED`, `IN_CONFIDENCE`, `SENSITIVE`, `RESTRICTED` based on pattern analysis (tax/IRD, commercial contracts, HR/personnel, executive policy).
+- Statutory disposal action assignment: `DESTROY`, `TRANSFER_TO_ARCHIVES`, or `PERMANENT_RETAIN`.
+- Disposal target date projection and overdue retention tracking from document creation or event trigger dates.
+- `POST /compliance/classify` — classify single document and calculate disposal schedule.
+- `POST /compliance/evaluate-batch` — batch compliance analysis with sensitivity breakdowns and flagged high-risk records.
+
+61 Vitest tests verify the complete suite including compliance classification, retention schedules, and API endpoints.
+
 ## Honest scope
 
 This is a real, tested document-control service, not a full iManage replacement.
