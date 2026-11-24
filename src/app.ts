@@ -5,6 +5,7 @@ import { DocumentService, NotFoundError, ValidationError } from "./service.js";
 import { ContentService } from "./content.js";
 import { DiligenceService } from "./diligence.js";
 import { studioPage } from "./studio.js";
+import { classifyDocumentContent, calculateRetentionSchedule, evaluateBatchCompliance } from "./compliance.js";
 
 const workspaceSchema = z.object({ code: z.string().min(1), name: z.string().min(1), client: z.string().min(1), retention_years: z.number().int().positive().default(7) });
 const documentSchema = z.object({ workspace_id: z.number().int().positive(), document_number: z.string().min(1), title: z.string().min(1), filename: z.string().min(1), content: z.string().min(1), actor: z.string().min(1) });
@@ -21,6 +22,8 @@ const claimSchema = z.object({ clause_type: z.string().min(1), term: z.string().
 const citationSchema = z.object({ document_id: z.number().int().positive(), page: z.number().int().positive(), quote: z.string().min(1), char_start: z.number().int().min(0), char_end: z.number().int().min(0) });
 const reviewSchema = z.object({ reviewer: z.string().min(1), decision: z.string().min(1), correction: z.string().optional() });
 const evaluateSchema = z.object({ gold: z.array(z.object({ clause_type: z.string(), term: z.string() })), predicted: z.array(z.object({ clause_type: z.string(), term: z.string() })) });
+const complianceClassifySchema = z.object({ title: z.string().min(1), content: z.string().min(1), created_date: z.string().optional(), event_date: z.string().optional() });
+const complianceBatchSchema = z.object({ records: z.array(z.object({ id: z.union([z.string(), z.number()]), title: z.string().min(1), content: z.string().min(1), created_date: z.string().optional(), event_date: z.string().optional() })).min(1) });
 
 export function buildApp(db: Database, apiKey: string): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -212,6 +215,35 @@ export function buildApp(db: Database, apiKey: string): FastifyInstance {
   app.post("/diligence/evaluate", async (request, reply) => {
     try { const body = evaluateSchema.parse(request.body); return diligence.evaluate(body.gold, body.predicted); }
     catch (error) { const r = handle(error); return reply.code(r.status).send(r.body); }
+  });
+
+  app.post("/compliance/classify", async (request, reply) => {
+    try {
+      const body = complianceClassifySchema.parse(request.body);
+      const classification = classifyDocumentContent(body.title, body.content);
+      const schedule = calculateRetentionSchedule(classification, body.created_date, body.event_date);
+      return reply.code(200).send(schedule);
+    } catch (error) {
+      const r = handle(error);
+      return reply.code(r.status).send(r.body);
+    }
+  });
+
+  app.post("/compliance/evaluate-batch", async (request, reply) => {
+    try {
+      const body = complianceBatchSchema.parse(request.body);
+      const summary = evaluateBatchCompliance(body.records.map(r => ({
+        id: r.id,
+        title: r.title,
+        content: r.content,
+        createdDate: r.created_date,
+        eventDate: r.event_date,
+      })));
+      return reply.code(200).send(summary);
+    } catch (error) {
+      const r = handle(error);
+      return reply.code(r.status).send(r.body);
+    }
   });
 
   return app;
